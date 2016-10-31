@@ -6,5 +6,6 @@ SOURCES += \
 HEADERS += \
     sensorlog.h
 
-CONFIG += mobility
-MOBILITY += location sensors systeminfo
+TARGET = jigglemeter
+
+QT += core gui widgets multimedia multimediawidgets sensors location charts

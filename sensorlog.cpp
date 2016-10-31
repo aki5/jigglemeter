@@ -1,150 +1,125 @@
 #include "sensorlog.h"
 #include <stdio.h>
-#include <fcntl.h>
-#include <unistd.h>
+#include <QDebug>
 
-static char *pfix = ",\n";
-static int indl = 0;
-static quint64 start_time;
-static char buf[64*1024];
-static int n;
-
-static void
-tryflush(int fd)
+double
+SensorLog::timeNow(void)
 {
-    if(n > sizeof buf - 1024){
-        write(fd, buf, n);
-        n = 0;
-    }
+	return 1e-3*(QDateTime::currentMSecsSinceEpoch() - startTime);
 }
 
-static double
-timenow(void)
+SensorLog::SensorLog()
 {
-    return 1e-3*(QDateTime::currentMSecsSinceEpoch() - start_time);
-}
-
-sensorlog::sensorlog()
-{
-	start_time = QDateTime::currentMSecsSinceEpoch();
-
-    connect(&battery, SIGNAL(currentFlowChanged(int)), this, SLOT(readCurrent(int)));
+	startTime = QDateTime::currentMSecsSinceEpoch();
+	accelSeries = new QLineSeries();
+	accelSeries->setUseOpenGL(true);
 
 
-    mkdir("/home/user/MyDocs/sensorlog", 0777);
-    char name[128];
-    snprintf(name, sizeof name, "/home/user/MyDocs/sensorlog/sensor%llu.json", start_time);
-    fd = creat(name, 0666);
+	chart = new QChart();
+	chart->legend()->hide();
+	chart->addSeries(accelSeries);
+	chart->createDefaultAxes();
+	chart->axisX()->setRange(0,100);
+	chart->axisY()->setRange(0,20);
+	chart->setTitle("jiggle meter");
 
-    connect(&accel, SIGNAL(readingChanged()), this, SLOT(readAccel()));
-    accel.setProperty("alwaysOn", true);    // alwayson: keep running even when screen blank
-    accel.start();
+	connect(&accel, SIGNAL(readingChanged()), this, SLOT(readAccel()));
+	accel.setProperty("alwaysOn", true);
+	accel.start();
 
-
+#if 0
 	gps = QGeoPositionInfoSource::createDefaultSource(this);
 	connect(gps, SIGNAL(positionUpdated(QGeoPositionInfo)), this, SLOT(readGps(QGeoPositionInfo)));
-    gps->setUpdateInterval(1000);
+	gps->setUpdateInterval(1000);
 	gps->startUpdates();
-/*
-*/
 
-        /*
 	connect(&compass, SIGNAL(readingChanged()), this, SLOT(readCompass()));
 	compass.setProperty("alwaysOn", true);
 	compass.start();
 
-
 	connect(&gyro, SIGNAL(readingChanged()), this, SLOT(readGyro()));
-    gyro.setProperty("alwaysOn", true);
+	gyro.setProperty("alwaysOn", true);
 	gyro.start();
-    */
+#endif
+	qDebug() << "startTime:" << 1e-3*startTime;
 
-
-    n += snprintf(buf + n, sizeof buf - n, "{");
-    indl++;
-    n += snprintf(buf + n, sizeof buf - n, "\n%*s\"start_time\": %.3f", indl, "", 1e-3*start_time);
 }
 
-
 void
-sensorlog::readGyro(void)
+SensorLog::readAccel(void)
 {
-	QGyroscopeReading *grd;
-	grd = gyro.reading();
-	if(grd == NULL)
+	QAccelerometerReading *rd;
+
+	rd = accel.reading();
+	if(rd == NULL)
+			return;
+
+	double x, y, z, mag;
+	x = rd->x();
+	y = rd->y();
+	z = rd->z();
+	mag = sqrt(x*x + y*y + z*z);
+
+	double time;
+	time = timeNow();
+	*accelSeries << QPointF(time, mag);
+
+	if(mag < minAccel)
+		minAccel = mag;
+	if(mag > maxAccel)
+		maxAccel = mag;
+
+	chart->axisX()->setRange(0,time);
+	chart->axisY()->setRange(minAccel, maxAccel);
+
+	//qDebug() << "accel: x:" << x << " y:" << y <<" z:" << z << " mag:" << mag;
+}
+
+#if 0
+void
+SensorLog::readGyro(void)
+{
+	QGyroscopeReading *rd;
+
+	rd = gyro.reading();
+	if(rd == NULL)
 		return;
-    //n = snprintf(buf, sizeof buf, "time %.3f gyro x %.2f y %.2f z %.2f\n", timenow(), grd->x(), grd->y(), grd->z());
+
+	double x, y, z, mag;
+	x = rd->x();
+	y = rd->y();
+	z = rd->z();
+	mag = sqrt(x*x + y*y + z*z);
+	qDebug() << "gyro: x:" << x << " y:" << y <<" z:" << z << " mag:" << mag;
 }
 
-
 void
-sensorlog::readCompass(void)
+SensorLog::readCompass(void)
 {
-	QCompassReading *crd;
+	QCompassReading *rd;
 
-	crd = compass.reading();
-	if(crd == NULL)
+	rd = compass.reading();
+	if(rd == NULL)
 		return;
-   // n += snprintf(buf, sizeof buf, "time %.3f compass azimuth %.0f calib %.2f\n", timenow(), crd->azimuth(), crd->calibrationLevel());
+
+	double azim, calib;
+	azim = rd->azimuth();
+	calib = rd->calibrationLevel();
+	qDebug() << "compass: azimuth: " << azim << "calibrationLevel: " << calib;
+
 }
+
 
 void
-sensorlog::readAccel(void)
+SensorLog::readGps(const QGeoPositionInfo &pos)
 {
-	QAccelerometerReading *ard;
+	QGeoCoordinate rd = pos.coordinate();
 
-	ard = accel.reading();
-	if(ard == NULL)
-	        return;
-    n += snprintf(buf + n, sizeof buf - n, "%s%*s\"accel\": {", pfix, indl, "");
-    indl++;
-    n += snprintf(buf + n, sizeof buf - n, "\n%*s\"time\": %.3f", indl, "", timenow());
-    n += snprintf(buf + n, sizeof buf - n, "%s%*s\"vec\": [%.2f, %.2f, %.2f]", pfix, indl, "", ard->x(), ard->y(), ard->z());
-    indl--;
-    n += snprintf(buf + n, sizeof buf - n, "\n%*s}", indl, "");
-    tryflush(fd);
+	double lat, lon, alt;
+	lat = rd.latitude();
+	lon = rd.longitude();
+	alt = rd.altitude();
+
+	qDebug() << "gps: latitude: " << lat << " longitude:" << lon << " altitude:" << alt;
 }
-
-void
-sensorlog::readGps(const QGeoPositionInfo &pos)
-{
-	QGeoCoordinate coord = pos.coordinate();
-
-    n += snprintf(buf + n, sizeof buf - n, "%s%*s\"gps\": {", pfix, indl, "");
-    indl++;
-    n += snprintf(buf + n, sizeof buf - n, "\n%*s\"time\": %.3f", indl, "", 1e-3*(pos.timestamp().toMSecsSinceEpoch() - start_time));
-    n += snprintf(buf + n, sizeof buf - n, "%s%*s\"lat\": %.6f", pfix, indl, "", coord.latitude());
-    n += snprintf(buf + n, sizeof buf - n, "%s%*s\"lon\": %.6f", pfix, indl, "", coord.longitude());
-    n += snprintf(buf + n, sizeof buf - n, "%s%*s\"ele\": %.1f", pfix, indl, "", coord.altitude());
-
-    if(pos.hasAttribute(QGeoPositionInfo::Direction))
-        n += snprintf(buf + n, sizeof buf - n, "%s%*s\"dir\": %.2f", pfix, indl, "", pos.attribute(QGeoPositionInfo::Direction));
-    if(pos.hasAttribute(QGeoPositionInfo::GroundSpeed))
-        n += snprintf(buf + n, sizeof buf - n, "%s%*s\"hvel\": %.2f", pfix, indl, "", pos.attribute(QGeoPositionInfo::GroundSpeed));
-    if(pos.hasAttribute(QGeoPositionInfo::VerticalSpeed))
-        n += snprintf(buf + n, sizeof buf - n, "%s%*s\"vvel\": %.2f", pfix, indl, "", pos.attribute(QGeoPositionInfo::VerticalSpeed));
-    if(pos.hasAttribute(QGeoPositionInfo::MagneticVariation))
-        n += snprintf(buf + n, sizeof buf - n, "%s%*s\"magvar\": %.2f", pfix, indl, "", pos.attribute(QGeoPositionInfo::MagneticVariation));
-    if(pos.hasAttribute(QGeoPositionInfo::HorizontalAccuracy))
-        n += snprintf(buf + n, sizeof buf - n, "%s%*s\"hprec\": %.2f", pfix, indl, "", pos.attribute(QGeoPositionInfo::HorizontalAccuracy));
-    if(pos.hasAttribute(QGeoPositionInfo::VerticalAccuracy))
-        n += snprintf(buf + n, sizeof buf - n, "%s%*s\"vprec\": %.2f", pfix, indl, "", pos.attribute(QGeoPositionInfo::VerticalAccuracy));
-    indl--;
-    n += snprintf(buf + n, sizeof buf - n, "\n%*s}", indl, "");
-    tryflush(fd);
-}
-
-void
-sensorlog::readCurrent(int curflow)
-{
-	n += snprintf(buf + n, sizeof buf - n, "%s%*s\"battery\": {", pfix, indl, "");
-	indl++;
-	n += snprintf(buf + n, sizeof buf - n, "\n%*s\"time\": %.3f", indl, "", timenow());
-	n += snprintf(buf + n, sizeof buf - n, "%s%*s\"curflow\": %d", pfix, indl, "", curflow);
-	n += snprintf(buf + n, sizeof buf - n, "%s%*s\"charge\": %d", pfix, indl, "", battery.remainingCapacity());
-	n += snprintf(buf + n, sizeof buf - n, "%s%*s\"capacity\": %d", pfix, indl, "", battery.nominalCapacity());
-
-	indl--;
-	n += snprintf(buf + n, sizeof buf - n, "\n%*s}", indl, "");
-	tryflush(fd);
-}
+#endif
