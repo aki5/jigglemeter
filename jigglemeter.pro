@@ -1,10 +1,10 @@
 
 SOURCES += \
-    main.cpp \
-    sensorlog.cpp
+	main.cpp \
+	sensorlog.cpp
 
 HEADERS += \
-    sensorlog.h
+	sensorlog.h
 
 TARGET = jigglemeter
 
