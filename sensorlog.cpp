@@ -33,7 +33,7 @@ SensorLog::readAccel(void)
 
 	rd = accel.reading();
 	if(rd == NULL)
-			return;
+		return;
 
 	double x, y, z, mag;
 	x = rd->x();
