@@ -9,11 +9,11 @@ main(int argc, char *argv[])
 
 	SensorLog log;
 
-	QChartView *chartView = new QChartView(&log.chart);
-	chartView->setRenderHint(QPainter::Antialiasing);
+	QChartView chartView(&log.chart);
+	chartView.setRenderHint(QPainter::Antialiasing);
 
 	QMainWindow window;
-	window.setCentralWidget(chartView);
+	window.setCentralWidget(&chartView);
 	window.showFullScreen();
 
 	return app.exec();
