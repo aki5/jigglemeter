@@ -9,7 +9,7 @@ main(int argc, char *argv[])
 
 	SensorLog log;
 
-	QChartView *chartView = new QChartView(log.chart);
+	QChartView *chartView = new QChartView(&log.chart);
 	chartView->setRenderHint(QPainter::Antialiasing);
 
 	QMainWindow window;

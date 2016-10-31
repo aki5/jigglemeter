@@ -18,31 +18,21 @@ QT_CHARTS_USE_NAMESPACE
 class SensorLog : QObject {
 	Q_OBJECT
 
-
 public:
 	SensorLog();
 	QLineSeries *accelSeries;
-	QChart *chart;
+	QChart chart;
 
 signals:
 public slots:
 	void readAccel(void);
-#if 0
-	void readGyro(void);
-	void readCompass(void);
-	void readGps(const QGeoPositionInfo &info);
-#endif
+
 private:
-#if 0
-	QGyroscope gyro;
-	QCompass compass;
-	QGeoPositionInfoSource *gps;
-#endif
+
 	QAccelerometer accel;
 	quint64 startTime;
 	double minAccel;
 	double maxAccel;
-
 
 	double timeNow(void);
 
